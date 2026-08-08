@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets and local state
+.env
+*.db
+
+# Personal working log, not part of the deliverable
+NOTES.md
+
+# Tooling
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.claude/
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,31 @@
+[project]
+name = "cohere-chat"
+version = "0.1.0"
+description = "FastAPI service over the Cohere Chat API"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "cohere>=7.0.8",
+    "fastapi>=0.141.1",
+    "pydantic-settings>=2.15.0",
+    "uvicorn[standard]>=0.52.1",
+]
+
+[dependency-groups]
+# Both httpx majors, and neither is a runtime dependency. The Cohere SDK pulls
+# httpx 0.x in itself and the tests raise its exception types; Starlette's
+# TestClient wants httpx2 and warns if it can't find it.
+dev = [
+    "httpx>=0.28.1",
+    "httpx2>=2.9.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"
+# Warnings fail the suite, so a deprecation gets dealt with when it appears
+# rather than scrolling past for months.
+filterwarnings = ["error"]
