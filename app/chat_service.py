@@ -5,10 +5,17 @@ from dataclasses import dataclass
 from typing import Any
 
 import cohere
+from cohere.core import ApiError
 
 from app.config import Settings
 
 log = logging.getLogger(__name__)
+
+# ApiError is imported by name rather than reached through cohere.core.
+# The SDK resolves its submodules lazily, so `cohere.core` only exists
+# once something has touched it. Reaching for it inside an except clause
+# raises AttributeError from the clause itself, and every API error then
+# goes uncaught instead of being mapped to a status.
 
 # Provider bodies can reflect the input back, name organisations, or run to
 # pages of diagnostics. Enough to identify the failure, not a transcript.
@@ -56,7 +63,7 @@ class ChatService:
                 messages=[{"role": "user", "content": query}],
                 max_tokens=self._settings.max_output_tokens,
             )
-        except cohere.core.ApiError as exc:
+        except ApiError as exc:
             # The body carries provider diagnostics, so it goes to the log and
             # not into the exception the HTTP layer will render.
             log.warning("Cohere returned %s: %s", exc.status_code, _for_log(exc.body))

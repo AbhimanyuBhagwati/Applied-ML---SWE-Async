@@ -4,6 +4,8 @@ import cohere
 import httpx
 import pytest
 
+from cohere.core import ApiError
+
 from app.chat_service import ChatError, ChatService
 from tests.conftest import FakeCohereClient, text_block
 
@@ -153,3 +155,25 @@ async def test_logged_bodies_are_flattened_and_truncated(settings, caplog):
     assert "\n" not in logged and "\r" not in logged
     assert len(logged) < 300
     assert logged.endswith("...")
+
+
+@pytest.mark.asyncio
+async def test_api_errors_are_caught_however_the_module_was_imported(settings):
+    """`cohere.core` is a lazily resolved attribute of the package.
+
+    `except cohere.core.ApiError` worked only because the module-level
+    annotation `client: cohere.AsyncClientV2` happened to resolve it as a side
+    effect. Any routine change, deferred annotations for instance, made the
+    except clause itself raise AttributeError, so no Cohere error was caught
+    and the whole status mapping in main.py was bypassed.
+    """
+    import app.chat_service as module
+
+    assert module.ApiError is ApiError
+
+    client = FakeCohereClient(raises=ApiError(status_code=429, body="slow down"))
+
+    with pytest.raises(ChatError) as caught:
+        await ChatService(client, settings).chat("hi")
+
+    assert caught.value.upstream_status == 429
