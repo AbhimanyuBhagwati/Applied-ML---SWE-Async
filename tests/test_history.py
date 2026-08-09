@@ -118,6 +118,26 @@ async def test_a_storage_failure_never_reaches_the_caller(store, caplog):
 
 
 @pytest.mark.asyncio
+async def test_no_failure_at_all_reaches_the_caller(store, caplog):
+    """Not just sqlite errors. Serialising the grounding can fail too, and the
+    answer is already produced either way."""
+
+    class Unserialisable:
+        def model_dump(self):
+            raise TypeError("not serialisable")
+
+    broken = answer()
+    broken.tool_calls = [Unserialisable()]
+
+    with caplog.at_level("WARNING"):
+        await store.record(broken)
+
+    assert "TypeError" in caplog.text
+    # And the history is still readable afterwards.
+    assert await store.page(limit=50, offset=0) == ([], 0)
+
+
+@pytest.mark.asyncio
 async def test_reading_still_raises_if_the_store_is_broken(store):
     """Unlike recording. A history endpoint that quietly returned nothing
     would be indistinguishable from an empty history."""

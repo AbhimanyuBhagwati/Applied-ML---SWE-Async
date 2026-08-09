@@ -85,8 +85,12 @@ class HistoryStore:
 
         try:
             await asyncio.to_thread(write)
-        except sqlite3.Error as exc:
-            log.warning("Could not record the turn: %s", exc)
+        except Exception as exc:  # noqa: BLE001 - see below
+            # Deliberately everything, not just sqlite3.Error. The point isn't
+            # which layer failed, it's that the answer is already produced and
+            # paid for: nothing here is worth turning a working request into a
+            # 500. Serialising the grounding can fail too, not only the write.
+            log.warning("Could not record the turn: %s: %s", type(exc).__name__, exc)
 
     async def page(self, limit: int, offset: int) -> tuple[list[dict[str, Any]], int]:
         """A slice of the history, newest first, with the total alongside.
