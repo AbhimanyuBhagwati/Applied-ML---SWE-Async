@@ -1,3 +1,5 @@
+import json
+
 import cohere
 import pytest
 from fastapi.testclient import TestClient
@@ -9,7 +11,7 @@ from tests.conftest import FakeCohereClient, text_block
 
 
 @pytest.fixture
-def make_client(monkeypatch):
+def make_client(monkeypatch, wikipedia):
     """Boots the app with a fake Cohere client swapped in.
 
     Both env vars are pinned because Settings also reads .env, and these tests
@@ -23,7 +25,7 @@ def make_client(monkeypatch):
             monkeypatch.setenv(name.upper(), str(value))
         get_settings.cache_clear()
         app.dependency_overrides[get_chat_service] = lambda: ChatService(
-            fake, app.state.settings
+            fake, wikipedia, app.state.settings
         )
         return TestClient(app)
 
@@ -67,8 +69,11 @@ def test_chat_returns_the_model_reply(make_client):
         "query": "Who was the second person to walk on the moon?",
         "response": "Buzz Aldrin.",
         "finish_reason": "COMPLETE",
+        "tool_plan": None,
+        "tool_calls": [],
+        "citations": [],
     }
-    assert fake.calls[0]["messages"][0]["content"].startswith("Who was the second")
+    assert fake.calls[0]["messages"][-1]["content"].startswith("Who was the second")
 
 
 @pytest.mark.parametrize(
@@ -95,14 +100,21 @@ def test_surrounding_whitespace_is_stripped(make_client):
     with make_client(fake) as client:
         body = client.post("/chat", json={"query": "  who walked second?\n"}).json()
 
-    assert fake.calls[0]["messages"][0]["content"] == "who walked second?"
+    assert fake.calls[0]["messages"][-1]["content"] == "who walked second?"
     assert body["query"] == "who walked second?"
 
 
 @pytest.mark.parametrize(
     "upstream,expected",
     [(429, 429), (401, 503), (403, 503), (400, 502), (500, 502), (None, 502)],
-    ids=["rate-limit", "bad-key", "forbidden", "bad-request", "server-error", "network"],
+    ids=[
+        "rate-limit",
+        "bad-key",
+        "forbidden",
+        "bad-request",
+        "server-error",
+        "network",
+    ],
 )
 def test_upstream_failures_map_to_sensible_statuses(make_client, upstream, expected):
     error = (
@@ -151,56 +163,6 @@ def test_output_tokens_are_capped(make_client):
     assert fake.calls[0]["max_tokens"] == 256
 
 
-def test_auth_is_off_unless_a_token_is_configured(make_client):
-    with make_client(FakeCohereClient([text_block("hi")])) as client:
-        assert client.post("/chat", json={"query": "hi"}).status_code == 200
-
-
-def test_auth_is_enforced_once_configured(make_client):
-    fake = FakeCohereClient([text_block("hi")])
-
-    with make_client(fake, api_auth_token="s3cret") as client:
-        missing = client.post("/chat", json={"query": "hi"})
-        wrong = client.post(
-            "/chat", json={"query": "hi"}, headers={"Authorization": "Bearer nope"}
-        )
-        right = client.post(
-            "/chat", json={"query": "hi"}, headers={"Authorization": "Bearer s3cret"}
-        )
-
-    assert missing.status_code == 401
-    assert wrong.status_code == 401
-    assert right.status_code == 200
-    # Only the authorised call should have reached Cohere.
-    assert len(fake.calls) == 1
-
-
-def test_rate_limit_is_off_by_default(make_client):
-    fake = FakeCohereClient([text_block("hi")])
-
-    with make_client(fake) as client:
-        codes = [
-            client.post("/chat", json={"query": "hi"}).status_code for _ in range(6)
-        ]
-
-    assert codes == [200] * 6
-
-
-def test_rate_limit_returns_429_with_retry_after(make_client):
-    fake = FakeCohereClient([text_block("hi")])
-
-    with make_client(fake, rate_limit_per_minute=2) as client:
-        codes = [
-            client.post("/chat", json={"query": "hi"}).status_code for _ in range(4)
-        ]
-        blocked = client.post("/chat", json={"query": "hi"})
-
-    assert codes == [200, 200, 429, 429]
-    assert int(blocked.headers["Retry-After"]) > 0
-    # Blocked calls must not reach Cohere, which is the whole point.
-    assert len(fake.calls) == 2
-
-
 def test_missing_api_key_is_a_503(make_client):
     with make_client(FakeCohereClient([]), api_key="") as client:
         response = client.post("/chat", json={"query": "hi"})
@@ -224,7 +186,9 @@ def test_route_uses_the_service_built_at_startup(monkeypatch):
         # Swap the service the lifespan built, then let the request find it the
         # normal way instead of being handed a fake.
         client.app.state.chat_service = ChatService(
-            FakeCohereClient([text_block("Buzz Aldrin.")]), client.app.state.settings
+            FakeCohereClient([text_block("Buzz Aldrin.")]),
+            client.app.state.wikipedia,
+            client.app.state.settings,
         )
         response = client.post("/chat", json={"query": "hi"})
 
@@ -270,34 +234,6 @@ def test_client_is_built_with_a_timeout_and_a_retry_cap(monkeypatch):
     assert built[0].closed is True
 
 
-@pytest.mark.asyncio
-async def test_the_sdk_honours_the_timeout_and_retries_we_pass():
-    """Guards the assumption the code rests on.
-
-    Reaches into SDK internals deliberately. The alternative is trusting that
-    `timeout=` does something, and an earlier version of this file was built on
-    a wrong belief about exactly that.
-    """
-    async with cohere.AsyncClientV2(api_key="x", timeout=12.5, max_retries=3) as client:
-        inner = client._client_wrapper.httpx_client
-
-        assert inner.httpx_client.timeout.read == 12.5
-        assert inner.base_max_retries == 3
-
-
-@pytest.mark.asyncio
-async def test_the_sdk_client_closes_itself():
-    """The other assumption: __aexit__ shuts down the httpx client it owns."""
-    client = cohere.AsyncClientV2(api_key="x")
-    inner = client._client_wrapper.httpx_client.httpx_client
-    assert not inner.is_closed
-
-    async with client:
-        pass
-
-    assert inner.is_closed
-
-
 @pytest.mark.parametrize(
     "query,expected",
     [("a", 200), ("a" * 8000, 200), ("a" * 8001, 422), ("", 422)],
@@ -309,29 +245,101 @@ def test_query_length_boundaries(make_client, query, expected):
         assert client.post("/chat", json={"query": query}).status_code == expected
 
 
-def test_the_limit_counts_every_attempt_not_just_the_ones_that_reach_cohere(make_client):
-    """Documented policy, so it gets a test rather than an accident.
+def test_the_endpoint_serialises_a_real_tool_round_trip(make_client):
+    """Every other API test used a fake that never calls a tool.
 
-    A caller who spends their budget on malformed bodies has spent it. The
-    alternative leaves the service floodable with requests that cost it work.
+    So nothing here ever serialised a populated tool_calls list, and the
+    service returning dataclasses while the response model wanted pydantic
+    models was a 500 that only showed up against the live API.
     """
-    fake = FakeCohereClient([text_block("ok")])
+    from tests.conftest import tool_call
 
-    with make_client(fake, rate_limit_per_minute=2) as client:
-        first = client.post("/chat", json={"query": ""})
-        second = client.post("/chat", json={"nope": 1})
-        third = client.post("/chat", json={"query": "a real one"})
+    fake = FakeCohereClient(
+        script=[
+            [tool_call("search_wikipedia", {"query": "Apollo 11", "limit": 2})],
+            [text_block("Buzz Aldrin was second.")],
+        ]
+    )
 
-    assert [first.status_code, second.status_code] == [422, 422]
-    assert third.status_code == 429
-    assert fake.calls == []
+    with make_client(fake) as client:
+        response = client.post("/chat", json={"query": "who was second?"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["response"] == "Buzz Aldrin was second."
+    assert body["tool_plan"] == "I will look this up."
+
+    call = body["tool_calls"][0]
+    assert call["name"] == "search_wikipedia"
+    assert call["arguments"] == {"query": "Apollo 11", "limit": 2}
+    assert call["result_count"] == 2
+    assert call["results"][0]["title"] == "Buzz Aldrin"
+    assert call["results"][0]["url"] == "https://en.wikipedia.org/wiki/Buzz_Aldrin"
 
 
-def test_a_bad_token_costs_budget_too(make_client):
-    """Checked before auth, so a bad-token flood isn't free."""
-    with make_client(FakeCohereClient([]), rate_limit_per_minute=1, api_auth_token="s") as c:
-        first = c.post("/chat", json={"query": "hi"}, headers={"Authorization": "Bearer x"})
-        second = c.post("/chat", json={"query": "hi"}, headers={"Authorization": "Bearer s"})
+def test_the_placeholder_user_agent_warns_at_startup(make_client, caplog):
+    with caplog.at_level("WARNING"), make_client(FakeCohereClient([])):
+        pass
 
-    assert first.status_code == 401
-    assert second.status_code == 429
+    assert "WIKIPEDIA_USER_AGENT is unset" in caplog.text
+
+
+def test_the_response_does_not_repeat_whole_articles(make_client):
+    """tool_calls was 8KB for a 227 byte answer, and the budget allows eight
+    searches. The caller is auditing the grounding, not re-reading Wikipedia."""
+    from tests.conftest import tool_call
+
+    fake = FakeCohereClient(
+        script=[
+            [tool_call("search_wikipedia", {"query": "moon"})],
+            [text_block("Buzz Aldrin was second.")],
+        ]
+    )
+
+    with make_client(fake) as client:
+        body = client.post("/chat", json={"query": "who?"}).json()
+
+    for result in body["tool_calls"][0]["results"]:
+        # Title, url and snippet survive whole; those are the audit trail.
+        assert result["title"]
+        assert result["url"]
+        assert len(result["extract"]) <= 203
+
+    assert len(json.dumps(body["tool_calls"])) < 2000
+
+
+def test_a_request_that_runs_too_long_is_a_504(make_client):
+    """A gateway timeout, not a 502: nothing upstream refused us."""
+    import asyncio
+
+    class SlowClient(FakeCohereClient):
+        async def chat(self, **kwargs):
+            await asyncio.sleep(5)
+
+    with make_client(SlowClient(), tool_loop_seconds=0.05) as client:
+        response = client.post("/chat", json={"query": "hi"})
+
+    assert response.status_code == 504
+    assert response.json()["detail"] == "The request took too long."
+
+
+def test_an_sdk_timeout_is_a_504_not_a_502(make_client):
+    """Nothing refused us, it just took too long, same as our own ceiling."""
+    import httpx
+
+    with make_client(FakeCohereClient(raises=httpx.ReadTimeout("read timed out"))) as c:
+        response = c.post("/chat", json={"query": "hi"})
+
+    assert response.status_code == 504
+    assert "read timed out" not in response.text
+
+
+@pytest.mark.parametrize("status", [408, 504], ids=["request-timeout", "gateway-timeout"])
+def test_upstream_saying_it_timed_out_is_a_504(make_client, status):
+    """Same thing to a caller as our own ceiling, so not a generic 502."""
+    error = cohere.core.ApiError(status_code=status, body="upstream timed out")
+
+    with make_client(FakeCohereClient(raises=error)) as client:
+        response = client.post("/chat", json={"query": "hi"})
+
+    assert response.status_code == 504

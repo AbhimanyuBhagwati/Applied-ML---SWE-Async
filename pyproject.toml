@@ -7,20 +7,22 @@ requires-python = ">=3.12"
 dependencies = [
     "cohere>=7.0.8",
     "fastapi>=0.141.1",
+    "httpx>=0.28.1",
     "pydantic-settings>=2.15.0",
     "uvicorn[standard]>=0.52.1",
 ]
 
 [dependency-groups]
-# Both httpx majors, and neither is a runtime dependency. The Cohere SDK pulls
-# httpx 0.x in itself and the tests raise its exception types; Starlette's
-# TestClient wants httpx2 and warns if it can't find it.
+# httpx2 alongside the httpx 0.x above, not instead of it. The app and the
+# Cohere SDK are both on 0.x; Starlette's TestClient wants httpx2 and warns
+# if it can't find it. Only the test client needs the new one.
 dev = [
     "httpx>=0.28.1",
     "httpx2>=2.9.1",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
+    "ruff>=0.16.2",
 ]
 
 [tool.pytest.ini_options]
@@ -29,3 +31,9 @@ asyncio_mode = "strict"
 # Warnings fail the suite, so a deprecation gets dealt with when it appears
 # rather than scrolling past for months.
 filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 90
+
+[tool.ruff.lint]
+extend-select = ["I", "UP", "SIM", "B"]

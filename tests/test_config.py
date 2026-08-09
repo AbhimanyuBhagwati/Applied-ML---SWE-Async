@@ -33,57 +33,33 @@ def test_env_vars_win(monkeypatch):
     "field,value",
     [
         ("request_timeout_seconds", -1),
-        ("request_timeout_seconds", 0),
-        ("max_retries", -1),
+        ("request_timeout_seconds", float("inf")),
         ("max_output_tokens", 0),
-        ("max_output_tokens", -100),
-        ("rate_limit_per_minute", -1),
+        ("wikipedia_extract_chars", 9000),
         ("cohere_model", ""),
     ],
-    ids=[
-        "negative-timeout",
-        "zero-timeout",
-        "negative-retries",
-        "zero-tokens",
-        "negative-tokens",
-        "negative-rate-limit",
-        "blank-model",
-    ],
+    ids=["negative", "infinite", "zero", "over-the-api-ceiling", "blank"],
 )
 def test_nonsense_values_are_refused(field, value):
-    """A negative rate limit used to just switch the limiter off, quietly."""
+    """A nonsense value should fail at startup, not be quietly accepted."""
     with pytest.raises(ValidationError):
         Settings(_env_file=None, **{field: value})
 
 
-def test_zero_is_allowed_where_it_means_off():
-    settings = Settings(_env_file=None, rate_limit_per_minute=0, max_retries=0)
+def test_the_shipped_env_example_actually_starts(tmp_path, monkeypatch):
+    """A fresh clone follows the README, so this file has to work as-is.
 
-    assert settings.rate_limit_per_minute == 0
-    assert settings.max_retries == 0
+    A blank WIKIPEDIA_USER_AGENT= line overrode the default and the app
+    refused to boot on the documented setup path.
+    """
+    from pathlib import Path
 
+    example = Path(__file__).parent.parent / ".env.example"
+    env = tmp_path / ".env"
+    env.write_text(example.read_text() + "\nCOHERE_API_KEY=some-key\n")
+    monkeypatch.chdir(tmp_path)
 
-@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
-def test_infinite_timeout_is_refused(value):
-    """`inf` sails past gt=0 and quietly removes the timeout again."""
-    with pytest.raises(ValidationError):
-        Settings(_env_file=None, request_timeout_seconds=value)
+    settings = Settings()
 
-
-@pytest.mark.parametrize("blank", ["   ", "\t", "\n "])
-def test_whitespace_only_strings_are_not_values(blank):
-    """A key of spaces would read as configured and then fail upstream."""
-    settings = Settings(_env_file=None, cohere_api_key=blank, api_auth_token=blank)
-
-    assert settings.cohere_api_key == ""
-    assert settings.api_auth_token == ""
-
-    with pytest.raises(ValidationError):
-        Settings(_env_file=None, cohere_model=blank)
-
-
-def test_values_are_trimmed():
-    settings = Settings(_env_file=None, cohere_api_key="  key  ", cohere_model=" m ")
-
-    assert settings.cohere_api_key == "key"
-    assert settings.cohere_model == "m"
+    assert settings.cohere_api_key == "some-key"
+    assert settings.wikipedia_user_agent

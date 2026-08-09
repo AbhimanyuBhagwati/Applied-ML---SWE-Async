@@ -1,4 +1,4 @@
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -15,15 +15,34 @@ class ChatRequest(BaseModel):
     # instead of a silently different request.
     model_config = ConfigDict(extra="forbid")
 
-    query: Query = Field(
-        ..., examples=["Who was the second person to walk on the moon?"]
-    )
+    query: Query = Field(..., examples=["Who was the second person to walk on the moon?"])
+
+
+class ToolCall(BaseModel):
+    """A search the model asked for, and what came back."""
+
+    name: str
+    arguments: dict[str, Any]
+    result_count: int
+    results: list[dict[str, Any]]
+
+
+class Citation(BaseModel):
+    start: int | None = None
+    end: int | None = None
+    text: str | None = None
+    sources: list[str] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):
     query: str
     response: str
     finish_reason: str | None = None
+    tool_plan: str | None = None
+    # The searches behind the answer, so the grounding can be checked rather
+    # than taken on trust.
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    citations: list[Citation] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
