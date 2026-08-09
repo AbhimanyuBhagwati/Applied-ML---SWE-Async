@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1110 660" font-family="'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3E4E48"/>
+    </marker>
+    <marker id="headr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5C6A65"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1110" height="660" rx="12" fill="#F6F8F6"/>
+
+  <!-- lifelines -->
+  <g stroke="#C6CFC9" stroke-width="1.2" stroke-dasharray="4 4">
+    <line x1="80" y1="62" x2="80" y2="628"/>
+    <line x1="230" y1="62" x2="230" y2="628"/>
+    <line x1="390" y1="62" x2="390" y2="628"/>
+    <line x1="550" y1="62" x2="550" y2="628"/>
+    <line x1="710" y1="62" x2="710" y2="628"/>
+    <line x1="870" y1="62" x2="870" y2="628"/>
+    <line x1="1030" y1="62" x2="1030" y2="628"/>
+  </g>
+
+  <!-- participants -->
+  <g>
+    <rect x="25" y="22" width="110" height="40" rx="8" fill="#0E6B62"/>
+    <text x="80" y="47" text-anchor="middle" font-size="12.5" font-weight="600" fill="#F3F7F5">caller</text>
+
+    <rect x="169" y="22" width="122" height="40" rx="8" fill="#FCFDFC" stroke="#D8DFDB" stroke-width="1.5"/>
+    <text x="230" y="47" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="12" font-weight="600" fill="#1B2422">main.py</text>
+
+    <rect x="329" y="22" width="122" height="40" rx="8" fill="#FCFDFC" stroke="#D8DFDB" stroke-width="1.5"/>
+    <text x="390" y="47" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1B2422">chat service</text>
+
+    <rect x="489" y="22" width="122" height="40" rx="8" fill="#EFF3EF" stroke="#A9B6B0" stroke-width="1.5"/>
+    <text x="550" y="47" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1B2422">Cohere v2</text>
+
+    <rect x="649" y="22" width="122" height="40" rx="8" fill="#FCFDFC" stroke="#D8DFDB" stroke-width="1.5"/>
+    <text x="710" y="47" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1B2422">Wikipedia client</text>
+
+    <rect x="809" y="22" width="122" height="40" rx="8" fill="#EFF3EF" stroke="#A9B6B0" stroke-width="1.5"/>
+    <text x="870" y="47" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1B2422">MediaWiki</text>
+
+    <rect x="969" y="22" width="122" height="40" rx="8" fill="#FCFDFC" stroke="#D8DFDB" stroke-width="1.5"/>
+    <text x="1030" y="47" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1B2422">history store</text>
+  </g>
+
+  <!-- messages -->
+  <g font-size="11" fill="#33413B">
+    <line x1="80" y1="100" x2="222" y2="100" stroke="#3E4E48" stroke-width="1.5" marker-end="url(#head)"/>
+    <text x="155" y="92" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="10.5">POST /chat</text>
+
+    <line x1="230" y1="132" x2="382" y2="132" stroke="#3E4E48" stroke-width="1.5" marker-end="url(#head)"/>
+    <text x="310" y="124" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="10.5">chat(query)</text>
+
+    <line x1="390" y1="164" x2="542" y2="164" stroke="#3E4E48" stroke-width="1.5" marker-end="url(#head)"/>
+    <text x="470" y="156" text-anchor="middle">messages + the tool on offer</text>
+
+    <line x1="550" y1="196" x2="398" y2="196" stroke="#5C6A65" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#headr)"/>
+    <text x="470" y="188" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="10.5">tool_calls</text>
+  </g>
+
+  <!-- loop frame -->
+  <rect x="330" y="216" width="630" height="256" rx="6" fill="none" stroke="#566A94" stroke-width="1.3"/>
+  <rect x="330" y="216" width="48" height="21" rx="4" fill="#566A94"/>
+  <text x="354" y="231" text-anchor="middle" font-size="10.5" font-weight="600" fill="#F6F8F6">loop</text>
+  <text x="388" y="231" font-size="10.5" font-style="italic" fill="#566A94">until an answer &#8212; inside the budgets</text>
+
+  <g font-size="11" fill="#33413B">
+    <line x1="390" y1="262" x2="702" y2="262" stroke="#3E4E48" stroke-width="1.5" marker-end="url(#head)"/>
+    <text x="546" y="254" text-anchor="middle">permitted searches, run together &#8212; at most 3 in flight</text>
+
+    <line x1="710" y1="292" x2="862" y2="292" stroke="#3E4E48" stroke-width="1.5" marker-end="url(#head)"/>
+    <text x="786" y="284" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="10.5">list=search</text>
+
+    <line x1="870" y1="320" x2="718" y2="320" stroke="#5C6A65" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#headr)"/>
+    <text x="790" y="312" text-anchor="middle">ranked hits + snippets</text>
+
+    <line x1="710" y1="350" x2="862" y2="350" stroke="#3E4E48" stroke-width="1.5" marker-end="url(#head)"/>
+    <text x="786" y="342" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="10.5">prop=extracts, 20/batch</text>
+
+    <line x1="870" y1="378" x2="718" y2="378" stroke="#5C6A65" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#headr)"/>
+    <text x="790" y="370" text-anchor="middle">opening paragraphs</text>
+
+    <line x1="710" y1="408" x2="398" y2="408" stroke="#5C6A65" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#headr)"/>
+    <text x="552" y="400" text-anchor="middle">title &#183; url &#183; snippet &#183; extract, per hit</text>
+
+    <line x1="390" y1="436" x2="542" y2="436" stroke="#3E4E48" stroke-width="1.5" marker-end="url(#head)"/>
+    <text x="470" y="428" text-anchor="middle">tool results as documents</text>
+
+    <line x1="550" y1="462" x2="398" y2="462" stroke="#5C6A65" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#headr)"/>
+    <text x="474" y="454" text-anchor="middle">answer + citations &#8212; or more tool_calls</text>
+  </g>
+
+  <!-- after the loop -->
+  <g font-size="11" fill="#33413B">
+    <line x1="390" y1="502" x2="238" y2="502" stroke="#5C6A65" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#headr)"/>
+    <text x="310" y="494" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="10.5">ChatResult</text>
+
+    <line x1="230" y1="534" x2="1022" y2="534" stroke="#3E4E48" stroke-width="1.5" marker-end="url(#head)"/>
+    <text x="626" y="526" text-anchor="middle">record the previewed answer</text>
+
+    <rect x="380" y="550" width="500" height="26" rx="4" fill="#F5EEDC" stroke="#D9C9A3" stroke-width="1"/>
+    <text x="630" y="567" text-anchor="middle" font-size="10.5" fill="#6E5716">a storage failure logs a warning and never fails the request</text>
+
+    <line x1="230" y1="606" x2="88" y2="606" stroke="#5C6A65" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#headr)"/>
+    <text x="155" y="598" text-anchor="middle">response &#183; tool_calls &#183; citations</text>
+  </g>
+</svg>

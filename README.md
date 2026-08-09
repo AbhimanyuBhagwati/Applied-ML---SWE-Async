@@ -6,6 +6,12 @@ model search Wikipedia if the question needs it, and returns the answer.
 
 All three tasks: the chat endpoint, Wikipedia grounding, and the history.
 
+Two companion documents. [ARCHITECTURE.md](ARCHITECTURE.md) is how the pieces
+fit and what bounds the work, with a map of where to look first.
+[ENGINEERING_LOG.md](ENGINEERING_LOG.md) is the build log — the decisions in
+the order they were made, every review pass and what it caught, mistakes left
+in place with the corrections alongside.
+
 ## Setup
 
 ```bash
@@ -212,6 +218,38 @@ reservation: billing follows tokens actually produced, so a roomy limit costs
 nothing on an ordinary answer. It needs headroom because thinking is on by
 default on the reasoning models and comes out of the same budget.
 
+## What I'd change before exposing this to customers
+
+The scope note above says what's deliberately absent; this is the order I'd
+close it in.
+
+1. **Auth and per-caller rate limiting, at a gateway.** Everything else keys
+   off knowing who the caller is: quota, and scoping `/history` so callers see
+   their own queries instead of everyone's. An earlier version carried bearer
+   auth and a per-process limiter inside the service; both were cut because a
+   per-process limiter is a speed bump that looks like enforcement, and the
+   wrong layer shouldn't ship dressed as the right one (the
+   [log](ENGINEERING_LOG.md) has the history).
+2. **Structured request logs.** A request id, latency, and token usage per
+   call. The warnings in there now are enough to debug a failure and nothing
+   more — you can't operate a service on them.
+3. **Secrets from a secret store, with rotation.** `.env` is fine on a laptop
+   and nowhere else; the key is metered money.
+4. **History becomes a real datastore with a policy.** Postgres once there's
+   more than one worker, cursor pagination instead of offsets that shift under
+   the reader, and a retention and deletion policy before either — the table
+   stores whatever people type into a text box, which is PII the moment a
+   customer pastes some.
+5. **Streaming.** The Chat API streams; a grounded answer can take tens of
+   seconds and currently arrives all at once at the end. SSE from `/chat`
+   changes what the wait feels like.
+6. **Observability, then tuning.** Metrics and alerts on 429s, 5xxs and
+   latency, and the loop budgets re-tuned from real traffic rather than from
+   my defaults.
+7. **CI, with the live contract tests on a schedule.** The offline suite on
+   every change; the live suite nightly against a non-trial key, so an API
+   change surfaces before customers report it.
+
 ## Layout
 
 * `app/config.py` reads the key, model name, timeout, retry count, token limit
@@ -317,3 +355,58 @@ Lint and formatting:
 ```bash
 uv run ruff check app tests && uv run ruff format --check app tests
 ```
+
+## How this was built, and with what
+
+**Process.** I read all three tasks before writing any code and drew the
+architecture on paper first. The seams — HTTP layer, chat service, upstream
+clients, then a store — were drawn knowing task 3 was coming, and the test of
+the sketch is that history landed without moving anything else. Then one task
+at a time, each finished with review passes; the
+[engineering log](ENGINEERING_LOG.md) records each pass and what it caught, in
+order.
+
+### AI-assisted development
+
+I used Claude Code and OpenAI Codex as complementary assistants throughout,
+with different jobs:
+
+* **Claude Code** sped up implementation to the architecture I'd set, wrote
+  and hardened tests against my cases, ran adversarial review passes over the
+  finished work, and drew the diagrams in [ARCHITECTURE.md](ARCHITECTURE.md).
+* **OpenAI Codex** was a second, independent reviewer: challenging
+  architectural decisions, probing edge cases, suggesting regression tests,
+  and tightening the documentation.
+
+Neither assistant's output was treated as authoritative. The working loop for
+any suggestion, from either:
+
+1. Define the behaviour and constraints myself.
+2. Give the assistant a bounded implementation or review task.
+3. Read the proposed change and its reasoning.
+4. Reproduce any reported defect independently before touching the code.
+5. Check provider-specific claims against the official docs or the installed
+   SDK — the log records one documented parameter that mocks accepted and the
+   live API rejected.
+6. Run the deterministic tests, and the opt-in live contract tests where
+   mocks can't answer.
+7. Accept, revise, or reject.
+
+The [engineering log](ENGINEERING_LOG.md) says which findings came from a
+review pass and which from my own reading, and claims that turned out wrong —
+the assistants' and mine — stay in the log as written with the correction
+alongside. Every live check (real Cohere calls, real Wikipedia, the
+three-endpoint run) I ran by hand. The requirements, the architecture, the
+tradeoffs, and the decision on every suggestion were mine.
+
+**References.**
+
+* [Cohere Chat API v2 reference](https://docs.cohere.com/v2/reference/chat)
+  and the [tool use guide](https://docs.cohere.com/v2/docs/tool-use-overview)
+* [MediaWiki API:Search](https://www.mediawiki.org/wiki/API:Search) and
+  TextExtracts (`prop=extracts`), plus the
+  [Wikimedia User-Agent policy](https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy)
+* RFC 9110 for the `Retry-After` grammar, and RFC 6750 for bearer credentials
+  (for the auth that was later cut)
+* FastAPI, pydantic-settings, httpx (`MockTransport` is what keeps the suite
+  offline), pytest, ruff, uv

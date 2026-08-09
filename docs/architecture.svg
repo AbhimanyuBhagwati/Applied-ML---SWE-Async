@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 430" font-family="'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4A5A54"/>
+    </marker>
+  </defs>
+
+  <!-- ground -->
+  <rect x="0" y="0" width="1020" height="430" rx="12" fill="#F6F8F6"/>
+
+  <!-- service boundary -->
+  <rect x="190" y="40" width="540" height="360" rx="10" fill="#FBFCFB" stroke="#C2CCC6" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="212" y="66" font-family="Menlo, Consolas, monospace" font-size="11" letter-spacing="2.5" fill="#5C6A65">SERVICE</text>
+
+  <!-- caller -->
+  <rect x="30" y="192" width="120" height="54" rx="27" fill="#0E6B62"/>
+  <text x="90" y="224" text-anchor="middle" font-size="14.5" font-weight="600" fill="#F3F7F5">caller</text>
+
+  <!-- main.py -->
+  <rect x="220" y="176" width="180" height="86" rx="8" fill="#FCFDFC" stroke="#D8DFDB" stroke-width="1.5"/>
+  <text x="310" y="206" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="14" font-weight="600" fill="#1B2422">main.py</text>
+  <text x="310" y="226" text-anchor="middle" font-size="11" fill="#5C6A65">HTTP layer</text>
+  <text x="310" y="243" text-anchor="middle" font-size="10.5" fill="#5C6A65">statuses &#183; lifetimes &#183; recording</text>
+
+  <!-- chat_service.py -->
+  <rect x="460" y="60" width="220" height="86" rx="8" fill="#FCFDFC" stroke="#D8DFDB" stroke-width="1.5"/>
+  <text x="570" y="90" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="14" font-weight="600" fill="#1B2422">chat_service.py</text>
+  <text x="570" y="110" text-anchor="middle" font-size="11" fill="#5C6A65">the tool loop</text>
+  <text x="570" y="127" text-anchor="middle" font-size="10.5" fill="#5C6A65">budgets &#183; citations</text>
+
+  <!-- wikipedia.py -->
+  <rect x="460" y="176" width="220" height="86" rx="8" fill="#FCFDFC" stroke="#D8DFDB" stroke-width="1.5"/>
+  <text x="570" y="206" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="14" font-weight="600" fill="#1B2422">wikipedia.py</text>
+  <text x="570" y="226" text-anchor="middle" font-size="11" fill="#5C6A65">MediaWiki client</text>
+  <text x="570" y="243" text-anchor="middle" font-size="10.5" fill="#5C6A65">backoff &#183; concurrency cap</text>
+
+  <!-- history.py -->
+  <rect x="460" y="292" width="220" height="86" rx="8" fill="#FCFDFC" stroke="#D8DFDB" stroke-width="1.5"/>
+  <text x="570" y="322" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="14" font-weight="600" fill="#1B2422">history.py</text>
+  <text x="570" y="342" text-anchor="middle" font-size="11" fill="#5C6A65">SQLite store</text>
+  <text x="570" y="359" text-anchor="middle" font-size="10.5" fill="#5C6A65">write swallows &#183; read raises</text>
+
+  <!-- Cohere -->
+  <rect x="790" y="74" width="200" height="58" rx="8" fill="#EFF3EF" stroke="#A9B6B0" stroke-width="1.5"/>
+  <text x="890" y="99" text-anchor="middle" font-size="13.5" font-weight="600" fill="#1B2422">Cohere Chat v2</text>
+  <text x="890" y="117" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="10" fill="#5C6A65">api.cohere.com</text>
+
+  <!-- MediaWiki -->
+  <rect x="790" y="190" width="200" height="58" rx="8" fill="#EFF3EF" stroke="#A9B6B0" stroke-width="1.5"/>
+  <text x="890" y="215" text-anchor="middle" font-size="13.5" font-weight="600" fill="#1B2422">MediaWiki API</text>
+  <text x="890" y="233" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="10" fill="#5C6A65">en.wikipedia.org/w/api.php</text>
+
+  <!-- history.db cylinder -->
+  <path d="M800 316 v44 a90 12 0 0 0 180 0 v-44" fill="#EFF3EF" stroke="#A9B6B0" stroke-width="1.5"/>
+  <ellipse cx="890" cy="316" rx="90" ry="12" fill="#EFF3EF" stroke="#A9B6B0" stroke-width="1.5"/>
+  <text x="890" y="348" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="12" fill="#1B2422">history.db</text>
+
+  <!-- arrows -->
+  <line x1="150" y1="219" x2="212" y2="219" stroke="#4A5A54" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="400" y1="194" x2="452" y2="112" stroke="#4A5A54" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="400" y1="244" x2="452" y2="326" stroke="#4A5A54" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="570" y1="146" x2="570" y2="168" stroke="#4A5A54" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="680" y1="103" x2="782" y2="103" stroke="#4A5A54" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="680" y1="219" x2="782" y2="219" stroke="#4A5A54" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="680" y1="335" x2="792" y2="335" stroke="#4A5A54" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- caption -->
+  <text x="510" y="419" text-anchor="middle" font-size="10.5" font-style="italic" fill="#5C6A65">dependencies point one way &#8212; every arrow inside the box is an injected dependency, and a test seam</text>
+</svg>
