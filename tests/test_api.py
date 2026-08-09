@@ -343,3 +343,142 @@ def test_upstream_saying_it_timed_out_is_a_504(make_client, status):
         response = client.post("/chat", json={"query": "hi"})
 
     assert response.status_code == 504
+
+
+# --- history (task 3) ---
+
+
+def test_history_starts_empty(make_client):
+    with make_client(FakeCohereClient([])) as client:
+        assert client.get("/history").json() == {
+            "total": 0,
+            "limit": 50,
+            "offset": 0,
+            "entries": [],
+        }
+
+
+def test_the_history_holds_what_the_caller_was_given(make_client):
+    """Round trip through the real endpoints, grounding included."""
+    from tests.conftest import tool_call
+
+    fake = FakeCohereClient(
+        script=[
+            [tool_call("search_wikipedia", {"query": "moon"})],
+            [text_block("Buzz Aldrin was second.")],
+        ]
+    )
+
+    with make_client(fake) as client:
+        answered = client.post("/chat", json={"query": "who was second?"}).json()
+        entry = client.get("/history").json()["entries"][0]
+
+    for field in ("query", "response", "finish_reason", "tool_plan", "citations"):
+        assert entry[field] == answered[field], field
+    assert entry["tool_calls"] == answered["tool_calls"]
+    assert entry["id"] and entry["created_at"]
+
+
+def test_history_is_newest_first(make_client):
+    with make_client(FakeCohereClient([text_block("a")])) as client:
+        for i in range(3):
+            client.post("/chat", json={"query": f"Q{i}"})
+        body = client.get("/history").json()
+
+    assert [e["query"] for e in body["entries"]] == ["Q2", "Q1", "Q0"]
+    assert body["total"] == 3
+
+
+def test_the_query_is_recorded_as_it_was_used(make_client):
+    """Stripped, so the record matches what the model was actually asked."""
+    with make_client(FakeCohereClient([text_block("hi")])) as client:
+        client.post("/chat", json={"query": "  who was second?\n"})
+        entry = client.get("/history").json()["entries"][0]
+
+    assert entry["query"] == "who was second?"
+
+
+def test_a_rejected_query_is_not_history(make_client):
+    """It never reached the model, so there is no response to pair it with."""
+    with make_client(FakeCohereClient([text_block("hi")])) as client:
+        assert client.post("/chat", json={"query": ""}).status_code == 422
+        assert client.get("/history").json()["total"] == 0
+
+
+def test_a_failed_answer_is_not_history(make_client):
+    error = cohere.core.ApiError(status_code=500, body="upstream is unwell")
+
+    with make_client(FakeCohereClient(raises=error)) as client:
+        assert client.post("/chat", json={"query": "who?"}).status_code == 502
+        assert client.get("/history").json()["total"] == 0
+
+
+def test_history_pages(make_client):
+    with make_client(FakeCohereClient([text_block("a")])) as client:
+        for i in range(5):
+            client.post("/chat", json={"query": f"Q{i}"})
+        first = client.get("/history", params={"limit": 2}).json()
+        second = client.get("/history", params={"limit": 2, "offset": 2}).json()
+        last = client.get("/history", params={"limit": 2, "offset": 4}).json()
+
+    assert [e["query"] for e in first["entries"]] == ["Q4", "Q3"]
+    assert [e["query"] for e in second["entries"]] == ["Q2", "Q1"]
+    assert [e["query"] for e in last["entries"]] == ["Q0"]
+    # Every page carries the whole total, so a caller can tell there is more.
+    assert first["total"] == second["total"] == last["total"] == 5
+
+
+@pytest.mark.parametrize(
+    "params",
+    [{"limit": 0}, {"limit": 201}, {"limit": -1}, {"offset": -1}, {"limit": "many"}],
+    ids=["zero", "over-max", "negative", "negative-offset", "not-a-number"],
+)
+def test_bad_paging_is_a_422(make_client, params):
+    """The same bounding as the query length, for the same reason."""
+    with make_client(FakeCohereClient([])) as client:
+        assert client.get("/history", params=params).status_code == 422
+
+
+def test_reading_history_calls_nobody(make_client, wikipedia_http):
+    """It's entirely local. Neither Cohere nor Wikipedia should hear about it."""
+    fake = FakeCohereClient([text_block("hi")])
+
+    with make_client(fake) as client:
+        client.post("/chat", json={"query": "who?"})
+        before = len(fake.calls), len(wikipedia_http.recorded_requests)
+        client.get("/history")
+        client.get("/history", params={"limit": 1})
+
+    assert (len(fake.calls), len(wikipedia_http.recorded_requests)) == before
+
+
+def test_history_survives_a_restart_through_the_endpoints(
+    tmp_path, monkeypatch, wikipedia
+):
+    """Two app lifespans over one database file."""
+    from app.chat_service import ChatService
+    from app.config import get_settings
+    from app.main import app, get_chat_service
+
+    database = str(tmp_path / "history.db")
+
+    def boot(fake):
+        monkeypatch.setenv("COHERE_API_KEY", "test-key")
+        monkeypatch.setenv("HISTORY_DATABASE_PATH", database)
+        get_settings.cache_clear()
+        app.dependency_overrides[get_chat_service] = lambda: ChatService(
+            fake, wikipedia, app.state.settings
+        )
+        return TestClient(app)
+
+    with boot(FakeCohereClient([text_block("Buzz Aldrin.")])) as client:
+        client.post("/chat", json={"query": "who was second?"})
+
+    with boot(FakeCohereClient([])) as client:
+        body = client.get("/history").json()
+
+    app.dependency_overrides.clear()
+    get_settings.cache_clear()
+
+    assert body["total"] == 1
+    assert body["entries"][0]["query"] == "who was second?"

@@ -4,7 +4,7 @@ A small FastAPI service with one endpoint: send it a question, it calls the
 [Cohere Chat API (v2)](https://docs.cohere.com/v2/reference/chat), lets the
 model search Wikipedia if the question needs it, and returns the answer.
 
-Tasks 1 and 2. Query history comes next, on top of this endpoint.
+All three tasks: the chat endpoint, Wikipedia grounding, and the history.
 
 ## Setup
 
@@ -92,6 +92,52 @@ Reports configuration readiness. With no API key it answers 503 and
 be routing traffic here. It does not call Cohere or Wikipedia, so it says the
 service is configured to work, not that both upstreams are up.
 
+### GET /history
+
+Every query and the answer it got, newest first.
+
+```bash
+curl -s 'localhost:8000/history?limit=20'
+```
+
+```json
+{
+  "total": 3,
+  "limit": 20,
+  "offset": 0,
+  "entries": [
+    {
+      "id": 3,
+      "created_at": "2026-08-09T01:23:16+00:00",
+      "query": "What year did the Titanic sink?",
+      "response": "The Titanic sank in 1912...",
+      "finish_reason": "COMPLETE",
+      "tool_plan": "I will search Wikipedia.",
+      "tool_calls": [{"name": "search_wikipedia", "...": "..."}],
+      "citations": [{"start": 0, "end": 7, "text": "Titanic", "sources": ["..."]}]
+    }
+  ]
+}
+```
+
+`limit` is 1 to 200, default 50; `offset` starts at 0. `total` is the size of
+the whole history rather than the page, so a caller can tell there is more to
+fetch.
+
+An entry holds what the caller was given, grounding included. Keeping only the
+query and the answer would throw away the searches and citations that task 2
+exists to produce.
+
+Only answered queries are recorded. A request rejected at validation never
+reached the model, and one that failed upstream has no model-generated response
+to pair the query with, so neither is history. A storage failure is logged and
+swallowed: the answer has already been produced, and losing a row is worth less
+than turning a working request into a 500.
+
+Newest first is what a caller usually wants. The cost is that offsets shift as
+new turns arrive, so deep paging through a busy history can repeat or skip a
+row.
+
 ## The Wikipedia tool
 
 The model is offered one tool, `search_wikipedia`. When it asks for a search we
@@ -155,6 +201,12 @@ Cohere credential, so anyone who can reach it spends your quota: run it locally
 and don't put it on a public address. That belongs in a gateway rather than in
 this service, and building it here would be more code than the task itself.
 
+With no auth there is no caller to scope the history to, so `/history` is
+global: everyone sees everyone's queries. On a shared address that is a privacy
+surface, not just a quota one. There is deliberately no `DELETE /history`, no
+search, and no filtering; the task asks for retrieval and that is what is
+here.
+
 `MAX_OUTPUT_TOKENS` (4096) caps one generation. It's a ceiling, not a
 reservation: billing follows tokens actually produced, so a roomy limit costs
 nothing on an ordinary answer. It needs headroom because thinking is on by
@@ -166,6 +218,9 @@ default on the reasoning models and comes out of the same budget.
   and the loop budgets from the environment, and bounds all of them.
 * `app/wikipedia.py` holds the MediaWiki client and the tool schema the model
   sees. The schema's wording is what decides whether the model searches at all.
+* `app/history.py` is the query log, one SQLite table. It's the only thing that
+  knows about storage, and `main.py` records a turn after the answer exists,
+  because persistence isn't `ChatService`'s job.
 * `app/chat_service.py` is the only thing that talks to Cohere. It builds the
   request, flattens the reply, and turns SDK exceptions into one `ChatError`
   that carries the upstream status without carrying the upstream body.
@@ -197,6 +252,7 @@ context manager, so the lifespan just holds it open with `async with` and its
 | Anything else upstream | 502 |
 | The request ran past `TOOL_LOOP_SECONDS`, or Cohere timed out | 504 |
 | No `COHERE_API_KEY` set | 503 |
+| `/history` limit outside 1 to 200, or a negative offset | 422 |
 
 Queries are stripped before anything else happens. Cohere rejects a
 whitespace-only query, so catching it here saves a pointless upstream call, and
@@ -232,6 +288,10 @@ tests to satisfy a number rather than to prove anything.
 * `tests/test_config.py` covers the defaults, env var precedence and the
   value bounds, built with `_env_file=None` so a developer's own .env can't
   change the result.
+* `tests/test_history.py` covers the store: the round trip with grounding
+  intact, ordering, paging, surviving a restart, and a write failure staying
+  out of the caller's way. No live test here; the history never leaves the
+  process, so mocks prove everything there is to prove.
 
 With coverage:
 

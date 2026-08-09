@@ -45,6 +45,32 @@ class ChatResponse(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
 
 
+class HistoryEntry(BaseModel):
+    """One recorded turn. Rhymes with ChatResponse, plus id and created_at.
+
+    It keeps the grounding as well as the answer: a history that dropped the
+    searches and citations would throw away the part task 2 exists to produce.
+    """
+
+    id: int
+    created_at: str
+    query: str
+    response: str
+    finish_reason: str | None = None
+    tool_plan: str | None = None
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    citations: list[Citation] = Field(default_factory=list)
+
+
+class HistoryPage(BaseModel):
+    # `total` is what says the page isn't the whole history: without it, a
+    # short page and the end of the history look the same.
+    total: int
+    limit: int
+    offset: int
+    entries: list[HistoryEntry]
+
+
 class HealthResponse(BaseModel):
     # "degraded" is served with a 503, so a load balancer stops routing here.
     status: Literal["ok", "degraded"]

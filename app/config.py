@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     # to be something exchars will never honour.
     wikipedia_extract_chars: int = Field(1200, gt=0, le=1200)
 
+    # Where the query history lives. Relative, so it sits beside wherever the
+    # app was started from.
+    history_database_path: TrimmedRequired = "history.db"
+
     # Rounds of searching, not Cohere calls: there is always one more call
     # after the last round to turn the results into an answer.
     max_tool_rounds: int = Field(4, gt=0, le=10)

@@ -6,11 +6,26 @@ from typing import Annotated
 
 import cohere
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 
 from app.chat_service import ChatError, ChatService, preview
 from app.config import DEFAULT_USER_AGENT, Settings, get_settings
-from app.schemas import ChatRequest, ChatResponse, HealthResponse, ToolCall
+from app.history import HistoryStore
+from app.schemas import (
+    ChatRequest,
+    ChatResponse,
+    HealthResponse,
+    HistoryPage,
+    ToolCall,
+)
 from app.wikipedia import WikipediaClient
 
 # What the caller is told for each class of upstream failure. Fixed strings, so
@@ -44,6 +59,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Ours, for Wikipedia. Cohere brings its own. Registered on the stack
     # straight away so it still gets closed if the Cohere client fails to open.
     stack = AsyncExitStack()
+    app.state.history = HistoryStore(settings.history_database_path)
+    stack.callback(app.state.history.close)
     http_client = await stack.enter_async_context(httpx.AsyncClient())
     app.state.http_client = http_client
     app.state.wikipedia = WikipediaClient(settings, http_client)
@@ -81,8 +98,13 @@ def get_app_settings(request: Request) -> Settings:
     return request.app.state.settings
 
 
+def get_history(request: Request) -> HistoryStore:
+    return request.app.state.history
+
+
 ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+HistoryDep = Annotated[HistoryStore, Depends(get_history)]
 
 
 @app.get("/health", response_model=HealthResponse, tags=["meta"])
@@ -101,7 +123,10 @@ async def health(settings: SettingsDep, response: Response) -> HealthResponse:
 
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])
 async def chat(
-    payload: ChatRequest, service: ChatServiceDep, settings: SettingsDep
+    payload: ChatRequest,
+    service: ChatServiceDep,
+    settings: SettingsDep,
+    history: HistoryDep,
 ) -> ChatResponse:
     if not settings.cohere_api_key:
         raise HTTPException(
@@ -122,7 +147,7 @@ async def chat(
         )
         raise HTTPException(status_code=code, detail=detail, headers=headers) from exc
 
-    return ChatResponse(
+    answer = ChatResponse(
         query=payload.query,
         response=result.text,
         finish_reason=result.finish_reason,
@@ -141,3 +166,28 @@ async def chat(
         ],
         citations=result.citations,
     )
+
+    # Recorded here rather than inside ChatService, because persistence isn't
+    # that class's job. Only answered queries: a request that failed has no
+    # model-generated response to pair the query with. The history holds
+    # exactly what the caller was given.
+    await history.record(answer)
+    return answer
+
+
+@app.get("/history", response_model=HistoryPage, tags=["history"])
+async def read_history(
+    history: HistoryDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> HistoryPage:
+    """Every query and the answer it got, newest first.
+
+    Paged rather than returned whole: the history only grows, and a response
+    carrying all of it eventually stops being one anybody can use. Newest
+    first because that is what a caller usually wants; the cost is that
+    offsets shift as new turns arrive, so deep paging through a busy history
+    can repeat or skip a row.
+    """
+    entries, total = await history.page(limit=limit, offset=offset)
+    return HistoryPage(total=total, limit=limit, offset=offset, entries=entries)
